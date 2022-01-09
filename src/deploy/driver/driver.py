@@ -36,20 +36,23 @@ from driver_base import FINNExampleOverlay
 # dictionary describing the I/O of the FINN-generated accelerator
 io_shape_dict = {
     # FINN DataType for input and output tensors
-    "idt" : DataType.UINT8,
-    "odt" : DataType.INT16,
+    "idt" : [DataType['UINT8']],
+    "odt" : [DataType['INT24']],
     # shapes for input and output tensors (NHWC layout)
-    "ishape_normal" : (1, 448, 448, 3),
-    "oshape_normal" : (1, 7, 7, 30),
+    "ishape_normal" : [(1, 416, 416, 3)],
+    "oshape_normal" : [(1, 13, 13, 18)],
     # folded / packed shapes below depend on idt/odt and input/output
     # PE/SIMD parallelization settings -- these are calculated by the
     # FINN compiler.
-    "ishape_folded" : (1, 448, 448, 1, 3),
-    "oshape_folded" : (1, 7, 7, 30, 1),
-    "ishape_packed" : (1, 448, 448, 1, 3),
-    "oshape_packed" : (1, 7, 7, 30, 2),
-    "input_dma_name" : 'idma0',
-    "number_of_external_weights": 0
+    "ishape_folded" : [(1, 416, 416, 1, 3)],
+    "oshape_folded" : [(1, 13, 13, 6, 3)],
+    "ishape_packed" : [(1, 416, 416, 1, 3)],
+    "oshape_packed" : [(1, 13, 13, 6, 9)],
+    "input_dma_name" : ['idma0'],
+    "output_dma_name" : ['odma0'],
+    "number_of_external_weights": 0,
+    "num_inputs" : 1,
+    "num_outputs" : 1,
 }
 
 if __name__ == "__main__":
@@ -58,8 +61,8 @@ if __name__ == "__main__":
     parser.add_argument('--platform', help='Target platform: zynq-iodma alveo', default="zynq-iodma")
     parser.add_argument('--batchsize', help='number of samples for inference', type=int, default=1)
     parser.add_argument('--bitfile', help='name of bitfile (i.e. "resizer.bit")', default="resizer.bit")
-    parser.add_argument('--inputfile', help='name of input npy file (i.e. "input.npy")', default="input.npy")
-    parser.add_argument('--outputfile', help='name of output npy file (i.e. "output.npy")', default="output.npy")
+    parser.add_argument('--inputfile', help='name(s) of input npy file(s) (i.e. "input.npy")', nargs="*", type=str, default=["input.npy"])
+    parser.add_argument('--outputfile', help='name(s) of output npy file(s) (i.e. "output.npy")', nargs="*", type=str, default=["output.npy"])
     parser.add_argument('--runtime_weight_dir', help='path to folder containing runtime-writable .dat weights', default="runtime_weights/")
     # parse arguments
     args = parser.parse_args()
@@ -81,16 +84,15 @@ if __name__ == "__main__":
     # for the remote execution the data from the input npy file has to be loaded,
     # packed and copied to the PYNQ buffer
     if exec_mode == "execute":
-        # remove old output file to prevent reusing old output
-        # in case execution fails
-        try:
-            os.remove(outputfile)
-        except FileNotFoundError:
-            pass
-        # load desired input .npy file
-        ibuf_normal = np.load(inputfile)
+        # load desired input .npy file(s)
+        ibuf_normal = []
+        for ifn in inputfile:
+            ibuf_normal.append(np.load(ifn))
         obuf_normal = accel.execute(ibuf_normal)
-        np.save(outputfile, obuf_normal)
+        if not isinstance(obuf_normal, list):
+            obuf_normal = [obuf_normal]
+        for o, obuf in enumerate(obuf_normal):
+            np.save(outputfile[o], obuf)
     elif exec_mode == "throughput_test":
         # remove old metrics file
         try:

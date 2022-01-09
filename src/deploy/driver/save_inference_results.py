@@ -29,7 +29,7 @@ def get_driver(bitfile, platform, weights):
     return driver
 
 def load_images(source):
-    img_paths = glob.glob(source + "*.jpg")
+    img_paths = glob.glob(source + "**/*.jpg")
     return img_paths
 
 def infer_and_save_results(driver, test_img_paths, img_size, conf_thres,

@@ -4,6 +4,7 @@
 - [Introduction](#introduction)
 - [Requirements](#requirements)
 - [Usage](#usage)
+- [Evaluation](#evaluation)
 
 
 ## Introduction
@@ -27,5 +28,13 @@ git clone git@github.com:sefaburakokcu/finn-quantized-yolo.git
 
 **Inference**
 
-Open _inference.ipynb_ under finn-quantized-yolo/src/deploy in jupyter-notebook.
+Open _inference.ipynb_ under finn-quantized-yolo/src/deploy/driver in jupyter-notebook.
 
+
+**Evaluation**
+
+Under _src/deploy/driver/_, run
+
+```bash
+python save_inference_results.py --source path-to-widerface-val-folder --outputs ./outputs/
+```

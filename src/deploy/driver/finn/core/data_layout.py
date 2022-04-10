@@ -31,5 +31,19 @@
 
 NHWC = ["N", "H", "W", "C"]
 NCHW = ["N", "C", "H", "W"]
+NCW = ["N", "C", "W"]
+NWC = ["N", "W", "C"]
 NC = ["N", "C"]
 UNKNOWN = []
+
+
+def is_channels_last(layout):
+    return layout[-1] == "C"
+
+
+def get_channels_last_layout_for_ndims(ndims):
+    return {4: NHWC, 3: NWC, 2: NC}[ndims]
+
+
+def get_channels_first_layout_for_ndims(ndims):
+    return {4: NCHW, 3: NCW, 2: NC}[ndims]

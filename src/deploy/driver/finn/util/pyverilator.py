@@ -28,7 +28,7 @@
 
 import os
 
-from finn.util.basic import get_rtlsim_trace_depth, make_build_dir
+from driver.finn.util.basic import get_rtlsim_trace_depth, make_build_dir
 
 try:
     from pyverilator import PyVerilator
@@ -72,7 +72,7 @@ def rtlsim_multi_io(sim, io_dict, num_out_values, trace_file="", sname="_V_V_"):
         sim.start_vcd_trace(trace_file)
 
     for outp in io_dict["outputs"]:
-        sim.io[outp + sname + "TREADY"] = 1
+        _write_signal(sim, outp + sname + "TREADY", 1)
 
     # observe if output is completely calculated
     # total_cycle_count will contain the number of cycles the calculation ran
@@ -89,11 +89,13 @@ def rtlsim_multi_io(sim, io_dict, num_out_values, trace_file="", sname="_V_V_"):
     while not (output_done):
         for inp in io_dict["inputs"]:
             inputs = io_dict["inputs"][inp]
-            sim.io[inp + sname + "TVALID"] = 1 if len(inputs) > 0 else 0
-            sim.io[inp + sname + "TDATA"] = inputs[0] if len(inputs) > 0 else 0
+            _write_signal(sim, inp + sname + "TVALID", 1 if len(inputs) > 0 else 0)
+            _write_signal(
+                sim, inp + sname + "TDATA", inputs[0] if len(inputs) > 0 else 0
+            )
             if (
-                sim.io[inp + sname + "TREADY"] == 1
-                and sim.io[inp + sname + "TVALID"] == 1
+                _read_signal(sim, inp + sname + "TREADY") == 1
+                and _read_signal(sim, inp + sname + "TVALID") == 1
             ):
                 inputs = inputs[1:]
             io_dict["inputs"][inp] = inputs
@@ -101,15 +103,14 @@ def rtlsim_multi_io(sim, io_dict, num_out_values, trace_file="", sname="_V_V_"):
         for outp in io_dict["outputs"]:
             outputs = io_dict["outputs"][outp]
             if (
-                sim.io[outp + sname + "TVALID"] == 1
-                and sim.io[outp + sname + "TREADY"] == 1
+                _read_signal(sim, outp + sname + "TREADY") == 1
+                and _read_signal(sim, outp + sname + "TVALID") == 1
             ):
-                outputs = outputs + [sim.io[outp + sname + "TDATA"]]
+                outputs = outputs + [_read_signal(sim, outp + sname + "TDATA")]
                 output_count += 1
             io_dict["outputs"][outp] = outputs
 
-        sim.io.ap_clk = 1
-        sim.io.ap_clk = 0
+        toggle_clk(sim)
 
         total_cycle_count = total_cycle_count + 1
 
@@ -141,12 +142,23 @@ def rtlsim_multi_io(sim, io_dict, num_out_values, trace_file="", sname="_V_V_"):
     return total_cycle_count
 
 
-def pyverilate_stitched_ip(model, read_internal_signals=True):
+def pyverilate_stitched_ip(
+    model,
+    read_internal_signals=True,
+    disable_common_warnings=True,
+    extra_verilator_args=[],
+):
     """Given a model with stitched IP, return a PyVerilator sim object.
-    If read_internal_signals is True, it will be possible to examine the
-    internal (not only port) signals of the Verilog module, but this may
-    slow down compilation and emulation.
     Trace depth is also controllable, see get_rtlsim_trace_depth()
+
+    :param read_internal_signals  If set, it will be possible to examine the
+        internal (not only port) signals of the Verilog module, but this may
+        slow down compilation and emulation.
+
+    :param disable_common_warnings If set, disable the set of warnings that
+        Vivado-HLS-generated Verilog typically triggers in Verilator
+        (which can be very verbose otherwise)
+
     """
     if PyVerilator is None:
         raise ImportError("Installation of PyVerilator is required.")
@@ -192,6 +204,19 @@ def pyverilate_stitched_ip(model, read_internal_signals=True):
                 wf.write("//Added from " + vfile + "\n\n")
                 wf.write(rf.read())
 
+    verilator_args = []
+    # disable common verilator warnings that should be harmless but commonly occur
+    # in large quantities for Vivado HLS-generated verilog code
+    if disable_common_warnings:
+        verilator_args += ["-Wno-STMTDLY"]
+        verilator_args += ["-Wno-PINMISSING"]
+        verilator_args += ["-Wno-IMPLICIT"]
+        verilator_args += ["-Wno-WIDTH"]
+        verilator_args += ["-Wno-COMBDLY"]
+    # force inlining of all submodules to ensure we can read internal signals properly
+    if read_internal_signals:
+        verilator_args += ["--inline-mult", "0"]
+
     sim = PyVerilator.build(
         top_module_file_name,
         verilog_path=[vivado_stitch_proj_dir],
@@ -200,6 +225,7 @@ def pyverilate_stitched_ip(model, read_internal_signals=True):
         top_module_name=top_module_name,
         auto_eval=False,
         read_internal_signals=read_internal_signals,
+        extra_args=verilator_args + extra_verilator_args,
     )
     return sim
 

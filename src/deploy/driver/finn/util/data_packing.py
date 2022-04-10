@@ -32,8 +32,8 @@ import os
 import sys
 from bitstring import BitArray
 
-from finn.core.datatype import DataType
-from finn.util.basic import roundup_to_integer_multiple
+from driver.finn.core.datatype import DataType
+from driver.finn.util.basic import roundup_to_integer_multiple
 
 
 def array2hexstring(array, dtype, pad_to_nbits, prefix="0x", reverse=False):
@@ -49,13 +49,13 @@ def array2hexstring(array, dtype, pad_to_nbits, prefix="0x", reverse=False):
 
     Examples:
 
-    array2hexstring([1, 1, 1, 0], DataType.BINARY, 4) = "0xe"
+    array2hexstring([1, 1, 1, 0], DataType["BINARY"], 4) = "0xe"
 
-    array2hexstring([1, 1, 1, 0], DataType.BINARY, 8) = "0x0e"
+    array2hexstring([1, 1, 1, 0], DataType["BINARY"], 8) = "0x0e"
 
-    array2hexstring([1, 1, 0, 1], DataType.BINARY, 4, reverse=True) = "0xb"
+    array2hexstring([1, 1, 0, 1], DataType["BINARY"], 4, reverse=True) = "0xb"
 
-    array2hexstring([1, 1, 1, 0], DataType.BINARY, 8, reverse=True) = "0x07"
+    array2hexstring([1, 1, 1, 0], DataType["BINARY"], 8, reverse=True) = "0x07"
     """
     if pad_to_nbits < 4:
         pad_to_nbits = 4
@@ -65,15 +65,21 @@ def array2hexstring(array, dtype, pad_to_nbits, prefix="0x", reverse=False):
         array = np.asarray(array, dtype=np.float32)
     # ensure one-dimensional array to pack
     assert array.ndim == 1, "The given array is not one-dimensional."
-    if dtype == DataType.BIPOLAR:
+    if dtype == DataType["BIPOLAR"]:
         # convert bipolar values to binary
         array = (array + 1) / 2
-        dtype = DataType.BINARY
+        dtype = DataType["BINARY"]
     # reverse prior to packing, if desired
     if reverse:
         array = np.flip(array, -1)
     lineval = BitArray(length=0)
     bw = dtype.bitwidth()
+    # special handling for fixed point: rescale, then pack as integers
+    if dtype.is_fixed_point():
+        sf = dtype.scale_factor()
+        array = array / sf
+        # replace dtype with signed integer equivalent
+        dtype = DataType["INT" + str(bw)]
     for val in array:
         # ensure that this value is permitted by chosen dtype
         assert dtype.allowed(val), "This value is not permitted by chosen dtype."
@@ -130,13 +136,13 @@ def pack_innermost_dim_as_hex_string(
 
     eA = ["0e", "06"]
 
-    pack_innermost_dim_as_hex_string(A, DataType.BINARY, 8) == eA
+    pack_innermost_dim_as_hex_string(A, DataType["BINARY"], 8) == eA
 
     B = [[[3, 3], [3, 3]], [[1, 3], [3, 1]]]
 
     eB = [[ "0f", "0f"], ["07", "0d"]]
 
-    pack_innermost_dim_as_hex_string(B, DataType.UINT2, 8) == eB
+    pack_innermost_dim_as_hex_string(B, DataType["UINT2"], 8) == eB
     """
 
     if type(ndarray) != np.ndarray or ndarray.dtype != np.float32:
@@ -179,6 +185,11 @@ def unpack_innermost_dim_from_hex_string(
     inner_dim_elems = out_shape[-1]
 
     array = []
+    if dtype.is_fixed_point():
+        # convert fixed point as signed integer
+        conv_dtype = DataType["INT" + str(targetBits)]
+    else:
+        conv_dtype = dtype
     for outer_elem in range(outer_dim_elems):
         ar_list = []
         ar_elem = data[0]
@@ -194,7 +205,12 @@ def unpack_innermost_dim_from_hex_string(
             elem = ar_elem_bin[lower_limit:upper_limit]
             elem.reverse()
             elem_str = "".join(map(str, elem))
-            ar_list.append(int(elem_str, 2))
+            if conv_dtype == DataType["FLOAT32"]:
+                ar_list.append(BitArray(bin=elem_str).float)
+            elif conv_dtype.is_integer():
+                ar_list.append(int(elem_str, 2))
+            else:
+                raise Exception("Not implemented for conv_dtype " + conv_dtype.name)
         # reverse inner dimension back to "normal" positions
         if reverse_inner is False:
             ar_list.reverse()
@@ -202,15 +218,18 @@ def unpack_innermost_dim_from_hex_string(
         # interpret output values correctly
 
         # interpret values as bipolar
-        if dtype == DataType.BIPOLAR:
+        if conv_dtype == DataType["BIPOLAR"]:
             ar_list = [2 * x - 1 for x in ar_list]
         # interpret values as signed values
-        elif dtype.name.startswith("INT"):
-            mask = 2 ** (dtype.bitwidth() - 1)
+        elif conv_dtype.name.startswith("INT"):
+            mask = 2 ** (conv_dtype.bitwidth() - 1)
             ar_list = [-(x & mask) + (x & ~mask) for x in ar_list]
 
         array.append(ar_list)
     array = np.asarray(array, dtype=np.float32).reshape(out_shape)
+    if dtype.is_fixed_point():
+        # convert signed integer to fixed point by applying scale
+        array = array * dtype.scale_factor()
     return array
 
 
@@ -250,10 +269,10 @@ def numpy_to_hls_code(
         if type(x) == str or type(x) == np.str_ or type(x) == np.str:
             return '%s("%s", 16)' % (hls_dtype, x)
         elif type(x) == np.float32:
-            if dtype == DataType.FLOAT32:
-                return str(x)
-            else:
+            if dtype.is_integer():
                 return str(int(x))
+            else:
+                return str(x)
         else:
             raise Exception("Unsupported type for numpy_to_hls_code")
 
@@ -281,11 +300,14 @@ def npy_to_rtlsim_input(input_file, input_dtype, pad_to_nbits, reverse_inner=Tru
         inp = np.load(input_file)
     else:
         raise Exception("input_file must be ndarray or filename for .npy")
-    packed_data = pack_innermost_dim_as_hex_string(
-        inp, input_dtype, pad_to_nbits, reverse_inner=reverse_inner
-    )
-    packed_data = packed_data.flatten()
-    packed_data = [int(x[2:], 16) for x in packed_data]
+    if inp.shape[-1] == 1 and input_dtype.is_integer():
+        packed_data = inp.flatten().astype(input_dtype.to_numpy_dt())
+    else:
+        packed_data = pack_innermost_dim_as_hex_string(
+            inp, input_dtype, pad_to_nbits, reverse_inner=reverse_inner
+        )
+        packed_data = packed_data.flatten()
+        packed_data = [int(x[2:], 16) for x in packed_data]
     return packed_data
 
 
@@ -342,7 +364,7 @@ def finnpy_to_packed_bytearray(
         if out_is_bit and no_pad and double_reverse:
             in_as_int8 = ndarray.astype(np.int8)
             # bipolar -> binary if needed
-            if dtype == DataType.BIPOLAR:
+            if dtype == DataType["BIPOLAR"]:
                 in_as_int8 = (in_as_int8 + 1) // 2
             # reverse inner
             in_as_int8 = np.flip(in_as_int8, axis=-1)

@@ -28,14 +28,9 @@
 
 import os
 
-from finn.custom_op.registry import getCustomOp
-from finn.util.data_packing import npy_to_rtlsim_input, rtlsim_output_to_npy
-from finn.util.pyverilator import (
-    pyverilate_get_liveness_threshold_cycles,
-    pyverilate_stitched_ip,
-    reset_rtlsim,
-    toggle_clk,
-)
+from driver.finn.custom_op.registry import getCustomOp
+from driver.finn.util.data_packing import npy_to_rtlsim_input, rtlsim_output_to_npy
+from driver.finn.util.pyverilator import pyverilate_stitched_ip, reset_rtlsim, rtlsim_multi_io
 
 try:
     from pyverilator import PyVerilator
@@ -51,7 +46,6 @@ def rtlsim_exec(model, execution_context, pre_hook=None, post_hook=None):
     - pre_hook : hook function to be called before sim start (after reset)
     - post_hook : hook function to be called after sim end
     """
-
     if PyVerilator is None:
         raise ImportError("Installation of PyVerilator is required.")
     # ensure stitched ip project already exists
@@ -64,135 +58,95 @@ def rtlsim_exec(model, execution_context, pre_hook=None, post_hook=None):
     ), """The
     directory from metadata property "vivado_stitch_proj" doesn't exist"""
     trace_file = model.get_metadata_prop("rtlsim_trace")
-    # extract input shape
-    # TODO extend for multiple inputs
-    i_name = model.graph.input[0].name
-    i_tensor = execution_context[i_name]
-    i_dt = model.get_tensor_datatype(i_name)
-    first_node = getCustomOp(model.find_consumer(i_name))
-    i_stream_w = first_node.get_instream_width()
-    # convert input into time multiplexed shape
-    i_folded_shape = first_node.get_folded_input_shape()
-    batchsize = i_tensor.shape[0]
-    # override batch size for input
-    i_folded_shape = list(i_folded_shape)
-    i_folded_shape[0] = batchsize
-    i_folded_shape = tuple(i_folded_shape)
-    # TODO any other layout transformations need to happen here!
-    i_tensor = i_tensor.reshape(i_folded_shape)
-    # extract output shape
-    o_name = model.graph.output[0].name
-    o_shape = model.get_tensor_shape(o_name)
-    o_dt = model.get_tensor_datatype(o_name)
-    last_node = getCustomOp(model.find_producer(o_name))
-    o_folded_shape = last_node.get_folded_output_shape()
-    # override batch size from actual input
-    o_shape = list(o_shape)
-    o_shape[0] = batchsize
-    o_shape = tuple(o_shape)
-    o_folded_shape = list(o_folded_shape)
-    o_folded_shape[0] = batchsize
-    o_folded_shape = tuple(o_folded_shape)
-    o_stream_w = last_node.get_outstream_width()
-    packedBits = o_stream_w
-    targetBits = o_dt.bitwidth()
-    # pack input
-    packed_input = npy_to_rtlsim_input(i_tensor, i_dt, i_stream_w)
-    num_out_values = last_node.get_number_output_values()
-    num_out_values *= batchsize
+    if trace_file is None:
+        trace_file = ""
+    extra_verilator_args = model.get_metadata_prop("extra_verilator_args")
+    if extra_verilator_args is None:
+        extra_verilator_args = []
+    else:
+        extra_verilator_args = eval(extra_verilator_args)
+
+    # extract i/o info to prepare io_dict
+    io_dict = {"inputs": {}, "outputs": {}}
+    if_dict = eval(model.get_metadata_prop("vivado_stitch_ifnames"))
+    # go over and prepare inputs
+    for i, i_vi in enumerate(model.graph.input):
+        i_name = i_vi.name
+        i_tensor = execution_context[i_name]
+        i_dt = model.get_tensor_datatype(i_name)
+        first_node_onnx = model.find_consumer(i_name)
+        first_node = getCustomOp(first_node_onnx)
+        node_inp_ind = list(first_node_onnx.input).index(i_name)
+        if node_inp_ind == 0:
+            # default node input (input 0)
+            i_stream_w = first_node.get_instream_width()
+            i_folded_shape = first_node.get_folded_input_shape()
+        else:
+            # not input 0; node must support specifying inp index
+            # for these functions
+            i_stream_w = first_node.get_instream_width(node_inp_ind)
+            i_folded_shape = first_node.get_folded_input_shape(node_inp_ind)
+        batchsize = i_tensor.shape[0]
+        # override batch size for input
+        i_folded_shape = list(i_folded_shape)
+        i_folded_shape[0] = batchsize
+        i_folded_shape = tuple(i_folded_shape)
+        # TODO any other layout transformations need to happen here!
+        i_tensor = i_tensor.reshape(i_folded_shape)
+        # pack input for rtlsim
+        packed_input = npy_to_rtlsim_input(i_tensor, i_dt, i_stream_w)
+        # add to io_dict
+        if_name = if_dict["s_axis"][i][0]
+        io_dict["inputs"][if_name] = packed_input
+    # go over outputs to determine how many values will be produced
+    num_out_values = 0
+    o_tensor_info = []
+    for o, o_vi in enumerate(model.graph.output):
+        # output in io_dict just needs an empty list
+        if_name = if_dict["m_axis"][o][0]
+        io_dict["outputs"][if_name] = []
+        # extract output shape
+        o_name = o_vi.name
+        o_shape = model.get_tensor_shape(o_name)
+        o_dt = model.get_tensor_datatype(o_name)
+        last_node = getCustomOp(model.find_producer(o_name))
+        o_folded_shape = last_node.get_folded_output_shape()
+        # override batch size from actual input
+        o_shape = list(o_shape)
+        o_shape[0] = batchsize
+        o_shape = tuple(o_shape)
+        o_folded_shape = list(o_folded_shape)
+        o_folded_shape[0] = batchsize
+        o_folded_shape = tuple(o_folded_shape)
+        o_stream_w = last_node.get_outstream_width()
+        o_tensor_info.append((o_stream_w, o_dt, o_folded_shape, o_shape))
+        num_out_values += batchsize * last_node.get_number_output_values()
+
     # prepare pyverilator model
     rtlsim_so = model.get_metadata_prop("rtlsim_so")
     if (rtlsim_so is None) or (not os.path.isfile(rtlsim_so)):
-        sim = pyverilate_stitched_ip(model)
+        sim = pyverilate_stitched_ip(model, extra_verilator_args=extra_verilator_args)
         model.set_metadata_prop("rtlsim_so", sim.lib._name)
     else:
         sim = PyVerilator(rtlsim_so, auto_eval=False)
-    ret = _run_rtlsim(
-        sim,
-        packed_input,
-        num_out_values,
-        trace_file,
-        pre_hook=pre_hook,
-        post_hook=post_hook,
-    )
-    packed_output = ret[0]
-    model.set_metadata_prop("cycles_rtlsim", str(ret[1]))
-    # unpack output and put into context
-    o_folded_tensor = rtlsim_output_to_npy(
-        packed_output, None, o_dt, o_folded_shape, packedBits, targetBits
-    )
-    execution_context[o_name] = o_folded_tensor.reshape(o_shape)
 
-
-def _run_rtlsim(
-    sim, inp, num_out_values, trace_file=None, reset=True, pre_hook=None, post_hook=None
-):
-    """Runs the pyverilator simulation by passing the input values to the simulation,
-    toggle the clock and observing the execution time. Argument num_out_values contains
-    the number of expected output values, so the simulation is closed after all
-    outputs are calculated. Function contains also an observation loop that can
-    abort the simulation if no output value is produced after a certain time
-    (liveness_threshold from function pyverilate_get_liveness_threshold_cycles()
-    from finn.util.fpgadataflow)"""
-    inputs = inp
-    outputs = []
-    sim.io.m_axis_0_tready = 1
-
-    # observe if output is completely calculated
-    # observation_count will contain the number of cycles the calculation ran
-    output_observed = False
-    observation_count = 0
-
-    # avoid infinite looping of simulation by aborting when there is no change in
-    # output values after LIVENESS_THRESHOLD cycles
-    no_change_count = 0
-    old_outputs = outputs
-    liveness_threshold = pyverilate_get_liveness_threshold_cycles()
-
-    if trace_file is not None:
-        sim.start_vcd_trace(trace_file)
-    if reset:
-        reset_rtlsim(sim)
-
+    # reset and call rtlsim, including any pre/post hooks
+    reset_rtlsim(sim)
     if pre_hook is not None:
         pre_hook(sim)
-
-    # TODO use utils.fpgadataflow.rtlsim_multi_io instead of manual code below
-    while not (output_observed):
-        sim.io.s_axis_0_tvalid = 1 if len(inputs) > 0 else 0
-        sim.io.s_axis_0_tdata = inputs[0] if len(inputs) > 0 else 0
-        if sim.io.s_axis_0_tready == 1 and sim.io.s_axis_0_tvalid == 1:
-            inputs = inputs[1:]
-        if sim.io.m_axis_0_tvalid == 1 and sim.io.m_axis_0_tready == 1:
-            outputs = outputs + [sim.io.m_axis_0_tdata]
-        toggle_clk(sim)
-
-        observation_count = observation_count + 1
-        no_change_count = no_change_count + 1
-
-        if len(outputs) == num_out_values:
-            cycles_rtlsim = observation_count
-            output_observed = True
-
-        if no_change_count == liveness_threshold:
-            if old_outputs == outputs:
-                if trace_file is not None:
-                    sim.flush_vcd_trace()
-                    sim.stop_vcd_trace()
-                raise Exception(
-                    "Error in simulation! Takes too long to produce output."
-                    "Consider setting the LIVENESS_THRESHOLD env.var. to a "
-                    "larger value."
-                )
-            else:
-                no_change_count = 0
-                old_outputs = outputs
-
+    n_cycles = rtlsim_multi_io(sim, io_dict, num_out_values, trace_file, sname="_")
     if post_hook is not None:
         post_hook(sim)
 
-    if trace_file is not None:
-        sim.flush_vcd_trace()
-        sim.stop_vcd_trace()
+    # unpack outputs and put back into execution context
+    for o, o_vi in enumerate(model.graph.output):
+        o_name = o_vi.name
+        if_name = if_dict["m_axis"][o][0]
+        o_stream_w, o_dt, o_folded_shape, o_shape = o_tensor_info[o]
+        packed_output = io_dict["outputs"][if_name]
+        o_folded_tensor = rtlsim_output_to_npy(
+            packed_output, None, o_dt, o_folded_shape, o_stream_w, o_dt.bitwidth()
+        )
+        execution_context[o_name] = o_folded_tensor.reshape(o_shape)
 
-    return (outputs, cycles_rtlsim)
+    model.set_metadata_prop("cycles_rtlsim", str(n_cycles))

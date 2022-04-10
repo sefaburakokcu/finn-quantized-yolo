@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
-<EDKSYSTEM EDWVERSION="1.2" TIMESTAMP="Fri Mar  5 12:04:55 2021" VIVADOVERSION="2020.1">
+<EDKSYSTEM EDWVERSION="1.2" TIMESTAMP="Sun Mar 14 16:31:50 2021" VIVADOVERSION="2020.1">
 
   <SYSTEMINFO ARCH="zynq" BOARD="tul.com.tw:pynq-z2:part0:1.0" DEVICE="7z020" NAME="top" PACKAGE="clg400" SPEEDGRADE="-1"/>
 
@@ -176,7 +176,7 @@
             <CONNECTION INSTANCE="rst_zynq_ps_100M" PORT="peripheral_aresetn"/>
           </CONNECTIONS>
         </PORT>
-        <PORT DIR="O" LEFT="431" NAME="m_axis_0_tdata" RIGHT="0" SIGIS="undef" SIGNAME="StreamingDataflowPartition_1_m_axis_0_tdata">
+        <PORT DIR="O" LEFT="7" NAME="m_axis_0_tdata" RIGHT="0" SIGIS="undef" SIGNAME="StreamingDataflowPartition_1_m_axis_0_tdata">
           <CONNECTIONS>
             <CONNECTION INSTANCE="odma0" PORT="s_axis_0_tdata"/>
           </CONNECTIONS>
@@ -191,7 +191,7 @@
             <CONNECTION INSTANCE="odma0" PORT="s_axis_0_tvalid"/>
           </CONNECTIONS>
         </PORT>
-        <PORT DIR="I" LEFT="7" NAME="s_axis_0_tdata" RIGHT="0" SIGIS="undef" SIGNAME="StreamingDataflowPartition_1_s_axis_0_tdata">
+        <PORT DIR="I" LEFT="23" NAME="s_axis_0_tdata" RIGHT="0" SIGIS="undef" SIGNAME="StreamingDataflowPartition_1_s_axis_0_tdata">
           <CONNECTIONS>
             <CONNECTION INSTANCE="idma0" PORT="m_axis_0_tdata"/>
           </CONNECTIONS>
@@ -209,7 +209,7 @@
       </PORTS>
       <BUSINTERFACES>
         <BUSINTERFACE BUSNAME="idma0_m_axis_0" NAME="s_axis_0" TYPE="TARGET" VLNV="xilinx.com:interface:axis:1.0">
-          <PARAMETER NAME="TDATA_NUM_BYTES" VALUE="1"/>
+          <PARAMETER NAME="TDATA_NUM_BYTES" VALUE="3"/>
           <PARAMETER NAME="TDEST_WIDTH" VALUE="0"/>
           <PARAMETER NAME="TID_WIDTH" VALUE="0"/>
           <PARAMETER NAME="TUSER_WIDTH" VALUE="0"/>
@@ -229,7 +229,7 @@
           </PORTMAPS>
         </BUSINTERFACE>
         <BUSINTERFACE BUSNAME="StreamingDataflowPartition_1_m_axis_0" NAME="m_axis_0" TYPE="INITIATOR" VLNV="xilinx.com:interface:axis:1.0">
-          <PARAMETER NAME="TDATA_NUM_BYTES" VALUE="54"/>
+          <PARAMETER NAME="TDATA_NUM_BYTES" VALUE="1"/>
           <PARAMETER NAME="TDEST_WIDTH" VALUE="0"/>
           <PARAMETER NAME="TID_WIDTH" VALUE="0"/>
           <PARAMETER NAME="TUSER_WIDTH" VALUE="0"/>
@@ -1319,7 +1319,7 @@
             <CONNECTION INSTANCE="smartconnect_0" PORT="S00_AXI_wvalid"/>
           </CONNECTIONS>
         </PORT>
-        <PORT DIR="O" LEFT="7" NAME="m_axis_0_tdata" RIGHT="0" SIGIS="undef" SIGNAME="StreamingDataflowPartition_1_s_axis_0_tdata">
+        <PORT DIR="O" LEFT="23" NAME="m_axis_0_tdata" RIGHT="0" SIGIS="undef" SIGNAME="StreamingDataflowPartition_1_s_axis_0_tdata">
           <CONNECTIONS>
             <CONNECTION INSTANCE="StreamingDataflowPartition_1" PORT="s_axis_0_tdata"/>
           </CONNECTIONS>
@@ -1544,7 +1544,7 @@
           </PORTMAPS>
         </BUSINTERFACE>
         <BUSINTERFACE BUSNAME="idma0_m_axis_0" NAME="m_axis_0" TYPE="INITIATOR" VLNV="xilinx.com:interface:axis:1.0">
-          <PARAMETER NAME="TDATA_NUM_BYTES" VALUE="1"/>
+          <PARAMETER NAME="TDATA_NUM_BYTES" VALUE="3"/>
           <PARAMETER NAME="TDEST_WIDTH" VALUE="0"/>
           <PARAMETER NAME="TID_WIDTH" VALUE="0"/>
           <PARAMETER NAME="TUSER_WIDTH" VALUE="0"/>
@@ -1843,7 +1843,7 @@
             <CONNECTION INSTANCE="axi_interconnect_0" PORT="M01_AXI_wvalid"/>
           </CONNECTIONS>
         </PORT>
-        <PORT DIR="I" LEFT="431" NAME="s_axis_0_tdata" RIGHT="0" SIGIS="undef" SIGNAME="StreamingDataflowPartition_1_m_axis_0_tdata">
+        <PORT DIR="I" LEFT="7" NAME="s_axis_0_tdata" RIGHT="0" SIGIS="undef" SIGNAME="StreamingDataflowPartition_1_m_axis_0_tdata">
           <CONNECTIONS>
             <CONNECTION INSTANCE="StreamingDataflowPartition_1" PORT="m_axis_0_tdata"/>
           </CONNECTIONS>
@@ -1983,7 +1983,7 @@
           </PORTMAPS>
         </BUSINTERFACE>
         <BUSINTERFACE BUSNAME="StreamingDataflowPartition_1_m_axis_0" NAME="s_axis_0" TYPE="TARGET" VLNV="xilinx.com:interface:axis:1.0">
-          <PARAMETER NAME="TDATA_NUM_BYTES" VALUE="54"/>
+          <PARAMETER NAME="TDATA_NUM_BYTES" VALUE="1"/>
           <PARAMETER NAME="TDEST_WIDTH" VALUE="0"/>
           <PARAMETER NAME="TID_WIDTH" VALUE="0"/>
           <PARAMETER NAME="TUSER_WIDTH" VALUE="0"/>

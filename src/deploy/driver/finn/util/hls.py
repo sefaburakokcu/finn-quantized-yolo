@@ -30,7 +30,7 @@
 import os
 import subprocess
 
-from finn.util.basic import which
+from driver.finn.util.basic import which
 
 
 class CallHLS:

@@ -10,8 +10,8 @@ import torchvision
 
 from matplotlib import pyplot as plt
 
-from driver import io_shape_dict
-from driver_base import FINNExampleOverlay
+from driver.driver import io_shape_dict
+from driver.driver_base import FINNExampleOverlay
 from utils import (clip_coords, scale_coords, letterbox, 
                    xywh2xyxy, non_max_suppression,  
                    visualize_boxes)

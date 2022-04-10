@@ -29,7 +29,7 @@
 import numpy as np
 import onnx
 
-import finn.core.data_layout as DataLayout
+import driver.finn.core.data_layout as DataLayout
 
 
 def valueinfo_to_tensor(vi):

@@ -34,11 +34,11 @@ import os
 import warnings
 from onnx import TensorProto
 
-import finn.util.basic as util
-import finn.util.onnx as onnxutil
-from finn.core.datatype import DataType
-from finn.transformation.double_to_single_float import DoubleToSingleFloat
-from finn.transformation.general import (
+import driver.finn.util.basic as util
+import driver.finn.util.onnx as onnxutil
+from driver.finn.core.datatype import DataType
+from driver.finn.transformation.double_to_single_float import DoubleToSingleFloat
+from driver.finn.transformation.general import (
     RemoveStaticGraphInputs,
     RemoveUnusedTensors,
     SortGraph,
@@ -58,7 +58,9 @@ class ModelWrapper:
         is made internally.
         """
         if isinstance(onnx_model_proto, str):
-            assert os.path.isfile(onnx_model_proto)
+            assert os.path.isfile(
+                onnx_model_proto
+            ), f"File not found: {onnx_model_proto}"
             self._model_proto = onnx.load(onnx_model_proto)
         elif isinstance(onnx_model_proto, bytes):
             self._model_proto = onnx.load_from_string(onnx_model_proto)
@@ -195,13 +197,16 @@ class ModelWrapper:
                 ret.quant_parameter_tensor_names, "finn_datatype", "key"
             )
             if ret_dt is not None:
-                ret_dt.value = datatype.name
-            else:
+                if datatype is None:
+                    ret_dt.Clear()
+                else:
+                    ret_dt.value = datatype.name
+            elif datatype is not None:
                 dt = onnx.StringStringEntryProto()
                 dt.key = "finn_datatype"
                 dt.value = datatype.name
                 ret.quant_parameter_tensor_names.append(dt)
-        else:
+        elif datatype is not None:
             qa = onnx.TensorAnnotation()
             dt = onnx.StringStringEntryProto()
             dt.key = "finn_datatype"
@@ -217,7 +222,11 @@ class ModelWrapper:
         vi_names += [(x.name, x) for x in graph.output]
         vi_names += [(x.name, x) for x in graph.value_info]
         try:
-            vi_ind = [x[0] for x in vi_names].index(tensor_name)
+            vi_t_names = [x[0] for x in vi_names]
+            assert vi_t_names.count(tensor_name) <= 1, (
+                "Multiple ValueInfoProto found for " + tensor_name
+            )
+            vi_ind = vi_t_names.index(tensor_name)
             vi = vi_names[vi_ind][1]
             return vi
         except ValueError:
@@ -230,7 +239,11 @@ class ModelWrapper:
         vi_names += [(x.name, x) for x in graph.output]
         vi_names += [(x.name, x) for x in graph.value_info]
         try:
-            vi_ind = [x[0] for x in vi_names].index(tensor_name)
+            vi_t_names = [x[0] for x in vi_names]
+            assert vi_t_names.count(tensor_name) <= 1, (
+                "Multiple ValueInfoProto found for " + tensor_name
+            )
+            vi_ind = vi_t_names.index(tensor_name)
             vi = vi_names[vi_ind][1]
             dims = [x.dim_value for x in vi.type.tensor_type.shape.dim]
             return dims
@@ -240,6 +253,8 @@ class ModelWrapper:
     def set_tensor_shape(self, tensor_name, tensor_shape, dtype=TensorProto.FLOAT):
         """Assigns shape in ValueInfoProto for tensor with given name."""
         new_vi = oh.make_tensor_value_info(tensor_name, dtype, tensor_shape)
+        # call get_tensor_shape to catch multiple ValueInfoProto cases
+        self.get_tensor_shape(tensor_name)
         # find what container tis tensor's ValueInfo lives in
         # if not found anywhere, we assume it's a new value_info
         target_container = self.graph.value_info
@@ -333,18 +348,25 @@ class ModelWrapper:
                 visit_list.append(current_producer)
                 if found:
                     return visit_list
-                else:
+                elif len(current_producer.input) > 0:
                     current_tensor = current_producer.input[0]
+                else:
+                    return None
 
     def find_consumer(self, tensor_name):
         """Finds and returns the node that consumes the tensor with given name.
-        Currently only works for linear graphs."""
-        all_inputs = [x.input[0] for x in self._model_proto.graph.node]
-        try:
-            consumer_ind = all_inputs.index(tensor_name)
-            return self._model_proto.graph.node[consumer_ind]
-        except ValueError:
+        If there are multiple consumers, only the first one is returned.
+        If there are no consumers, returns None."""
+        ret = self.find_consumers(tensor_name)
+        if ret is None:
             return None
+        elif len(ret) == 1:
+            return ret[0]
+        else:
+            warnings.warn(
+                "find_consumer: found multiple consumers, returning first one"
+            )
+            return ret[0]
 
     def find_consumers(self, tensor_name):
         """Finds and returns a list of the nodes that consume tensor with
@@ -534,13 +556,7 @@ class ModelWrapper:
     def set_tensor_layout(self, tensor_name, data_layout):
         """Sets the data layout annotation of tensor with given name. See
         get_tensor_layout for examples."""
-        tensor_shape = self.get_tensor_shape(tensor_name)
         assert type(data_layout) == list, "data_layout must be a list"
-        if tensor_shape is not None:
-            assert len(tensor_shape) == len(
-                data_layout
-            ), """Mismatch between number
-            of dimensions of tensor shape and data layout annotation."""
         graph = self._model_proto.graph
         qnt_annotations = graph.quantization_annotation
         ret = util.get_by_name(qnt_annotations, tensor_name, "tensor_name")

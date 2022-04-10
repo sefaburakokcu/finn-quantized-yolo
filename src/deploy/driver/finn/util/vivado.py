@@ -28,7 +28,7 @@
 
 import os
 
-from finn.util.basic import launch_process_helper, which
+from driver.finn.util.basic import launch_process_helper, which
 
 
 def out_of_context_synth(

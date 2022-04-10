@@ -31,8 +31,8 @@ import os
 import subprocess
 import warnings
 
-from finn.core.rtlsim_exec import rtlsim_exec
-from finn.util.basic import gen_finn_dt_tensor
+from driver.finn.core.rtlsim_exec import rtlsim_exec
+from driver.finn.util.basic import gen_finn_dt_tensor
 
 
 def throughput_test_remote(model, batchsize=1000, timeout=None):
@@ -121,24 +121,30 @@ def throughput_test_rtlsim(model, batchsize=100):
     ), """Top-level exec_mode
     metadata_prop must be set to rtlsim"""
 
-    # create random input
-    iname = model.graph.input[0].name
-    ishape = model.get_tensor_shape(iname)
-    ishape_batch = ishape
-    ishape_batch[0] = batchsize
-    idt = model.get_tensor_datatype(iname)
-    dummy_input = gen_finn_dt_tensor(idt, ishape_batch)
-    # compute input/output sizes
-    oname = model.graph.output[0].name
-    oshape = model.get_tensor_shape(oname)
-    oshape_batch = oshape
-    oshape_batch[0] = batchsize
-    odt = model.get_tensor_datatype(oname)
-    i_bytes = (np.prod(ishape_batch) * idt.bitwidth()) / 8
-    o_bytes = (np.prod(oshape_batch) * odt.bitwidth()) / 8
-    # make empty exec context and insert input
+    # make empty exec context and insert random inputs
     ctx = model.make_empty_exec_context()
-    ctx[iname] = dummy_input
+    i_bytes = 0
+    for i_vi in model.graph.input:
+        # create random input
+        iname = i_vi.name
+        ishape = model.get_tensor_shape(iname)
+        ishape_batch = ishape
+        ishape_batch[0] = batchsize
+        idt = model.get_tensor_datatype(iname)
+        dummy_input = gen_finn_dt_tensor(idt, ishape_batch)
+        ctx[iname] = dummy_input
+        i_bytes += (np.prod(ishape_batch) * idt.bitwidth()) / 8
+
+    # compute total output size as well
+    o_bytes = 0
+    for o_vi in model.graph.output:
+        oname = o_vi.name
+        oshape = model.get_tensor_shape(oname)
+        oshape_batch = oshape
+        oshape_batch[0] = batchsize
+        odt = model.get_tensor_datatype(oname)
+        o_bytes += (np.prod(oshape_batch) * odt.bitwidth()) / 8
+
     # remove liveness threshold, launch rtlsim
     os.environ["LIVENESS_THRESHOLD"] = "-1"
     rtlsim_exec(model, ctx)

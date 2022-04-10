@@ -28,218 +28,342 @@
 
 
 import numpy as np
-from enum import Enum, auto
+from abc import ABC, abstractmethod
+from enum import Enum, EnumMeta
 
 
-class DataType(Enum):
-    """Enum class that contains FINN data types to set the quantization annotation.
-    ONNX does not support data types smaller than 8-bit integers, whereas in FINN we are
-    interested in smaller integers down to ternary and bipolar.
+class BaseDataType(ABC):
+    "Base class for FINN data types."
 
-    Assignment of DataTypes to indices based on following ordering:
+    def signed(self):
+        "Returns whether this DataType can represent negative numbers."
+        return self.min() < 0
 
-    * unsigned to signed
+    def __eq__(self, other):
+        if isinstance(other, BaseDataType):
+            return self.get_canonical_name() == other.get_canonical_name()
+        elif isinstance(other, str):
+            return self.get_canonical_name() == other
+        else:
+            return NotImplemented
 
-    * fewer to more bits
+    def __hash__(self):
+        return hash(self.get_canonical_name())
 
-    Currently supported DataTypes:"""
+    @property
+    def name(self):
+        return self.get_canonical_name()
 
-    # important: the get_smallest_possible() member function is dependent on ordering.
-    BINARY = auto()
-    UINT2 = auto()
-    UINT3 = auto()
-    UINT4 = auto()
-    UINT5 = auto()
-    UINT6 = auto()
-    UINT7 = auto()
-    UINT8 = auto()
-    UINT9 = auto()
-    UINT10 = auto()
-    UINT11 = auto()
-    UINT12 = auto()
-    UINT13 = auto()
-    UINT14 = auto()
-    UINT15 = auto()
-    UINT16 = auto()
-    UINT17 = auto()
-    UINT18 = auto()
-    UINT19 = auto()
-    UINT20 = auto()
-    UINT21 = auto()
-    UINT22 = auto()
-    UINT23 = auto()
-    UINT24 = auto()
-    UINT25 = auto()
-    UINT26 = auto()
-    UINT27 = auto()
-    UINT28 = auto()
-    UINT29 = auto()
-    UINT30 = auto()
-    UINT31 = auto()
-    UINT32 = auto()
-    UINT64 = auto()
-    BIPOLAR = auto()
-    TERNARY = auto()
-    INT2 = auto()
-    INT3 = auto()
-    INT4 = auto()
-    INT5 = auto()
-    INT6 = auto()
-    INT7 = auto()
-    INT8 = auto()
-    INT9 = auto()
-    INT10 = auto()
-    INT11 = auto()
-    INT12 = auto()
-    INT13 = auto()
-    INT14 = auto()
-    INT15 = auto()
-    INT16 = auto()
-    INT17 = auto()
-    INT18 = auto()
-    INT19 = auto()
-    INT20 = auto()
-    INT21 = auto()
-    INT22 = auto()
-    INT23 = auto()
-    INT24 = auto()
-    INT25 = auto()
-    INT26 = auto()
-    INT27 = auto()
-    INT28 = auto()
-    INT29 = auto()
-    INT30 = auto()
-    INT31 = auto()
-    INT32 = auto()
-    INT64 = auto()
-    FLOAT32 = auto()
+    def __repr__(self):
+        return self.get_canonical_name()
 
+    def __str__(self):
+        return self.get_canonical_name()
+
+    @abstractmethod
     def bitwidth(self):
-        """Returns the number of bits required for this DataType."""
+        "Returns the number of bits required for this DataType."
+        pass
 
-        if self.name.startswith("UINT"):
-            return int(self.name.strip("UINT"))
-        elif self.name.startswith("INT"):
-            return int(self.name.strip("INT"))
-        elif "FLOAT" in self.name:
-            return int(self.name.strip("FLOAT"))
-        elif self.name in ["BINARY", "BIPOLAR"]:
-            return 1
-        elif self.name == "TERNARY":
-            return 2
-        else:
-            raise Exception("Unrecognized data type: %s" % self.name)
-
+    @abstractmethod
     def min(self):
-        """Returns the smallest possible value allowed by this DataType."""
+        "Returns the smallest possible value allowed by this DataType."
+        pass
 
-        if self.name.startswith("UINT") or self.name == "BINARY":
-            return 0
-        elif self.name.startswith("INT"):
-            return -(2 ** (self.bitwidth() - 1))
-        elif self.name == "FLOAT32":
-            return np.finfo(np.float32).min
-        elif self.name == "BIPOLAR":
-            return -1
-        elif self.name == "TERNARY":
-            return -1
-        else:
-            raise Exception("Unrecognized data type: %s" % self.name)
-
+    @abstractmethod
     def max(self):
-        """Returns the largest possible value allowed by this DataType."""
+        "Returns the largest possible value allowed by this DataType."
+        pass
 
-        if self.name.startswith("UINT"):
-            return (2 ** (self.bitwidth())) - 1
-        elif self.name == "BINARY":
-            return +1
-        elif self.name.startswith("INT"):
-            return (2 ** (self.bitwidth() - 1)) - 1
-        elif self.name == "FLOAT32":
-            return np.finfo(np.float32).max
-        elif self.name == "BIPOLAR":
-            return +1
-        elif self.name == "TERNARY":
-            return +1
-        else:
-            raise Exception("Unrecognized data type: %s" % self.name)
-
+    @abstractmethod
     def allowed(self, value):
         """Check whether given value is allowed for this DataType.
 
         * value (float32): value to be checked"""
+        pass
 
-        if "FLOAT" in self.name:
-            return True
-        elif "INT" in self.name:
-            return (
-                (self.min() <= value)
-                and (value <= self.max())
-                and float(value).is_integer()
-            )
-        elif self.name == "BINARY":
-            return value in [0, 1]
-        elif self.name == "BIPOLAR":
-            return value in [-1, +1]
-        elif self.name == "TERNARY":
-            return value in [-1, 0, +1]
-        else:
-            raise Exception("Unrecognized data type: %s" % self.name)
-
+    @abstractmethod
     def get_num_possible_values(self):
         """Returns the number of possible values this DataType can take. Only
         implemented for integer types for now."""
-        assert self.is_integer(), """This function only works for integers for now,
-        not for the DataType you used this function with."""
-        if "INT" in self.name:
-            return abs(self.min()) + abs(self.max()) + 1
-        elif self.name == "BINARY" or self.name == "BIPOLAR":
-            return 2
-        elif self.name == "TERNARY":
-            return 3
+        pass
 
+    @abstractmethod
+    def is_integer(self):
+        "Returns whether this DataType represents integer values only."
+        pass
+
+    @abstractmethod
+    def is_fixed_point(self):
+        "Returns whether this DataType represent fixed-point values only."
+        pass
+
+    @abstractmethod
+    def get_hls_datatype_str(self):
+        "Returns the corresponding Vivado HLS datatype name."
+        pass
+
+    @abstractmethod
+    def to_numpy_dt(self):
+        "Return an appropriate numpy datatype that can represent this FINN DataType."
+        pass
+
+    @abstractmethod
+    def get_canonical_name(self):
+        "Return a canonical string representation of this FINN DataType."
+
+
+class FloatType(BaseDataType):
+    def bitwidth(self):
+        return 32
+
+    def min(self):
+        return np.finfo(np.float32).min
+
+    def max(self):
+        return np.finfo(np.float32).max
+
+    def allowed(self, value):
+        return True
+
+    def get_num_possible_values(self):
+        raise Exception("Undefined for FloatType")
+
+    def is_integer(self):
+        return False
+
+    def is_fixed_point(self):
+        return False
+
+    def get_hls_datatype_str(self):
+        return "float"
+
+    def to_numpy_dt(self):
+        return np.float32
+
+    def get_canonical_name(self):
+        return "FLOAT32"
+
+
+class IntType(BaseDataType):
+    def __init__(self, bitwidth, signed):
+        super().__init__()
+        self._bitwidth = bitwidth
+        self._signed = signed
+
+    def bitwidth(self):
+        return self._bitwidth
+
+    def min(self):
+        unsigned_min = 0
+        signed_min = -(2 ** (self.bitwidth() - 1))
+        return signed_min if self._signed else unsigned_min
+
+    def max(self):
+        unsigned_max = (2 ** (self.bitwidth())) - 1
+        signed_max = (2 ** (self.bitwidth() - 1)) - 1
+        return signed_max if self._signed else unsigned_max
+
+    def allowed(self, value):
+        return (
+            (self.min() <= value)
+            and (value <= self.max())
+            and float(value).is_integer()
+        )
+
+    def get_num_possible_values(self):
+        return abs(self.min()) + abs(self.max()) + 1
+
+    def is_integer(self):
+        return True
+
+    def is_fixed_point(self):
+        return False
+
+    def get_hls_datatype_str(self):
+        if self.signed():
+            return "ap_int<%d>" % self.bitwidth()
+        else:
+            return "ap_uint<%d>" % self.bitwidth()
+
+    def to_numpy_dt(self):
+        if self.bitwidth() <= 8:
+            return np.int8 if self.signed() else np.uint8
+        elif self.bitwidth() <= 16:
+            return np.int16 if self.signed() else np.uint16
+        elif self.bitwidth() <= 32:
+            return np.int32 if self.signed() else np.uint32
+        elif self.bitwidth() <= 64:
+            return np.int64 if self.signed() else np.uint64
+        else:
+            raise Exception("Unknown numpy dtype for " + str(self))
+
+    def get_canonical_name(self):
+        if self.bitwidth() == 1 and (not self.signed()):
+            return "BINARY"
+        else:
+            prefix = "INT" if self.signed() else "UINT"
+            return prefix + str(self.bitwidth())
+
+
+class BipolarType(BaseDataType):
+    def bitwidth(self):
+        return 1
+
+    def min(self):
+        return -1
+
+    def max(self):
+        return +1
+
+    def allowed(self, value):
+        return value in [-1, +1]
+
+    def get_num_possible_values(self):
+        return 2
+
+    def is_integer(self):
+        return True
+
+    def is_fixed_point(self):
+        return False
+
+    def get_hls_datatype_str(self):
+        return "ap_int<1>"
+
+    def to_numpy_dt(self):
+        return np.int8
+
+    def get_canonical_name(self):
+        return "BIPOLAR"
+
+
+class TernaryType(BaseDataType):
+    def bitwidth(self):
+        return 2
+
+    def min(self):
+        return -1
+
+    def max(self):
+        return +1
+
+    def allowed(self, value):
+        return value in [-1, 0, +1]
+
+    def get_num_possible_values(self):
+        return 3
+
+    def is_integer(self):
+        return True
+
+    def is_fixed_point(self):
+        return False
+
+    def get_hls_datatype_str(self):
+        return "ap_int<2>"
+
+    def to_numpy_dt(self):
+        return np.int8
+
+    def get_canonical_name(self):
+        return "TERNARY"
+
+
+class FixedPointType(IntType):
+    def __init__(self, bitwidth, intwidth):
+        super().__init__(bitwidth=bitwidth, signed=True)
+        assert intwidth < bitwidth, "FixedPointType violates intwidth < bitwidth"
+        self._intwidth = intwidth
+
+    def int_bits(self):
+        return self._intwidth
+
+    def frac_bits(self):
+        return self.bitwidth() - self.int_bits()
+
+    def scale_factor(self):
+        return 2 ** -(self.frac_bits())
+
+    def min(self):
+        return super().min() * self.scale_factor()
+
+    def max(self):
+        return super().max() * self.scale_factor()
+
+    def allowed(self, value):
+        int_value = value / self.scale_factor()
+        return IntType(self._bitwidth, True).allowed(int_value)
+
+    def is_integer(self):
+        return False
+
+    def is_fixed_point(self):
+        return True
+
+    def get_hls_datatype_str(self):
+        return "ap_fixed<%d, %d>" % (self.bitwidth(), self.int_bits())
+
+    def to_numpy_dt(self):
+        return np.float32
+
+    def get_canonical_name(self):
+        return "FIXED<%d,%d>" % (self.bitwidth(), self.int_bits())
+
+
+def resolve_datatype(name):
+    _special_types = {
+        "BINARY": IntType(1, False),
+        "BIPOLAR": BipolarType(),
+        "TERNARY": TernaryType(),
+        "FLOAT32": FloatType(),
+    }
+    if name in _special_types.keys():
+        return _special_types[name]
+    elif name.startswith("UINT"):
+        bitwidth = int(name.replace("UINT", ""))
+        return IntType(bitwidth, False)
+    elif name.startswith("INT"):
+        bitwidth = int(name.replace("INT", ""))
+        return IntType(bitwidth, True)
+    elif name.startswith("FIXED"):
+        name = name.replace("FIXED<", "")
+        name = name.replace(">", "")
+        nums = name.split(",")
+        bitwidth = int(nums[0].strip())
+        intwidth = int(nums[1].strip())
+        return FixedPointType(bitwidth, intwidth)
+    else:
+        raise KeyError("Could not resolve DataType " + name)
+
+
+class DataTypeMeta(EnumMeta):
+    def __getitem__(self, name):
+        return resolve_datatype(name)
+
+
+class DataType(Enum, metaclass=DataTypeMeta):
+    """Enum class that contains FINN data types to set the quantization annotation.
+    ONNX does not support data types smaller than 8-bit integers, whereas in FINN we are
+    interested in smaller integers down to ternary and bipolar."""
+
+    @staticmethod
+    def get_accumulator_dt_cands():
+        cands = ["BINARY"]
+        cands += ["UINT%d" % (x + 1) for x in range(64)]
+        cands += ["BIPOLAR", "TERNARY"]
+        cands += ["INT%d" % (x + 1) for x in range(64)]
+        return cands
+
+    @staticmethod
     def get_smallest_possible(value):
         """Returns smallest (fewest bits) possible DataType that can represent
         value. Prefers unsigned integers where possible."""
         if not int(value) == value:
             return DataType["FLOAT32"]
-        for k in DataType.__members__:
-            dt = DataType[k]
+        cands = DataType.get_accumulator_dt_cands()
+        for cand in cands:
+            dt = DataType[cand]
             if (dt.min() <= value) and (value <= dt.max()):
                 return dt
-
-    def signed(self):
-        """Returns whether this DataType can represent negative numbers."""
-        return self.min() < 0
-
-    def is_integer(self):
-        """Returns whether this DataType represents integer values only."""
-        # only FLOAT32 is noninteger for now
-        return self != DataType.FLOAT32
-
-    def get_hls_datatype_str(self):
-        """Returns the corresponding Vivado HLS datatype name."""
-        if self.is_integer():
-            if self.signed():
-                return "ap_int<%d>" % self.bitwidth()
-            else:
-                return "ap_uint<%d>" % self.bitwidth()
-        else:
-            return "float"
-
-    def to_numpy_dt(self):
-        "For 8/16/32/64-bit types, return equivalent NumPy dtype"
-
-        if self.is_integer():
-            if self.bitwidth() <= 8:
-                return np.int8 if self.signed() else np.uint8
-            elif self.bitwidth() <= 16:
-                return np.int16 if self.signed() else np.uint16
-            elif self.bitwidth() <= 32:
-                return np.int32 if self.signed() else np.uint32
-            elif self.bitwidth() <= 64:
-                return np.int64 if self.signed() else np.uint64
-            else:
-                raise Exception("Unknown numpy dtype for " + str(self))
-        else:
-            return np.float32
+        raise Exception("Could not find a suitable int datatype for " + str(value))

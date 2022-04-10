@@ -26,7 +26,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from finn.util.basic import get_by_name, is_finn_op
+from driver.finn.util.basic import get_by_name, is_finn_op
 
 
 def is_fpgadataflow_node(node):

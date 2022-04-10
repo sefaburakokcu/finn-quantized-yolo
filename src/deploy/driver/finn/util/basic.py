@@ -35,7 +35,7 @@ import sys
 import tempfile
 import warnings
 
-from finn.core.datatype import DataType
+from driver.finn.core.datatype import DataType
 
 # mapping from PYNQ board names to FPGA part names
 pynq_part_map = dict()
@@ -44,6 +44,7 @@ pynq_part_map["Pynq-Z1"] = "xc7z020clg400-1"
 pynq_part_map["Pynq-Z2"] = "xc7z020clg400-1"
 pynq_part_map["ZCU102"] = "xczu9eg-ffvb1156-2-e"
 pynq_part_map["ZCU104"] = "xczu7ev-ffvc1156-2-e"
+pynq_part_map["ZCU111"] = "xczu28dr-ffvg1517-2-e"
 
 # native AXI HP port width (in bits) for PYNQ boards
 pynq_native_port_width = dict()
@@ -52,6 +53,7 @@ pynq_native_port_width["Pynq-Z2"] = 64
 pynq_native_port_width["Ultra96"] = 128
 pynq_native_port_width["ZCU102"] = 128
 pynq_native_port_width["ZCU104"] = 128
+pynq_native_port_width["ZCU111"] = 128
 
 # Alveo device and platform mappings
 alveo_part_map = dict()
@@ -69,7 +71,7 @@ alveo_default_platform["U280"] = "xilinx_u280_xdma_201920_3"
 
 def is_finn_op(op_type):
     "Return whether given op_type string is a FINN custom op"
-    return op_type.startswith("finn")
+    return op_type.startswith("finn") or op_type.startswith("qonnx.custom_op")
 
 
 def get_rtlsim_trace_depth():
@@ -303,16 +305,22 @@ def gen_finn_dt_tensor(finn_dt, tensor_shape):
     """Generates random tensor in given shape and with given FINN DataType."""
     if type(tensor_shape) == list:
         tensor_shape = tuple(tensor_shape)
-    if finn_dt == DataType.BIPOLAR:
+    if finn_dt == DataType["BIPOLAR"]:
         tensor_values = np.random.randint(2, size=tensor_shape)
         tensor_values = 2 * tensor_values - 1
-    elif finn_dt == DataType.BINARY:
+    elif finn_dt == DataType["BINARY"]:
         tensor_values = np.random.randint(2, size=tensor_shape)
-    elif "INT" in finn_dt.name or finn_dt == DataType.TERNARY:
+    elif "INT" in finn_dt.name or finn_dt == DataType["TERNARY"]:
         tensor_values = np.random.randint(
             finn_dt.min(), high=finn_dt.max() + 1, size=tensor_shape
         )
-    elif finn_dt == DataType.FLOAT32:
+    elif "FIXED" in finn_dt.name:
+        int_dt = DataType["INT" + str(finn_dt.bitwidth())]
+        tensor_values = np.random.randint(
+            int_dt.min(), high=int_dt.max() + 1, size=tensor_shape
+        )
+        tensor_values = tensor_values * finn_dt.scale_factor()
+    elif finn_dt == DataType["FLOAT32"]:
         tensor_values = np.random.randn(*tensor_shape)
     else:
         raise ValueError(
@@ -358,13 +366,13 @@ def sanitize_quant_values(model, node_tensors, execution_context, check_values=F
     integers are indeed integers.
     """
 
-    for tensor in node_tensors:
-        dtype = model.get_tensor_datatype(tensor)
+    for tensor_name in node_tensors:
+        dtype = model.get_tensor_datatype(tensor_name)
         # floats don't need sanitization, skip to next
         # introduces less quicker runtime
-        if dtype == DataType.FLOAT32:
+        if dtype == DataType["FLOAT32"]:
             continue
-        current_values = execution_context[tensor]
+        current_values = execution_context[tensor_name]
         updated_values = current_values
         has_to_be_rounded = False
         # TODO: vectorize with numpy
@@ -377,7 +385,7 @@ def sanitize_quant_values(model, node_tensors, execution_context, check_values=F
             warnings.warn(
                 "The values of tensor {} can't be represented "
                 "with the set FINN datatype ({}), they will be rounded to match the "
-                "FINN datatype.".format(tensor, dtype)
+                "FINN datatype.".format(tensor_name, dtype.name)
             )
         # check if rounded values are not too far from original values
         max_error = max(np.abs(current_values - updated_values).flatten())
@@ -390,15 +398,15 @@ def sanitize_quant_values(model, node_tensors, execution_context, check_values=F
                         raise Exception(
                             """Values can't be represented with set
                                 finn datatype ({}) for input {}""".format(
-                                dtype, tensor
+                                dtype, tensor_name
                             )
                         )
-            execution_context[tensor] = updated_values
+            execution_context[tensor_name] = updated_values
         else:
             raise Exception(
                 """Rounding error is too high to match set FINN
             datatype ({}) for input {}""".format(
-                    dtype, tensor
+                    dtype, tensor_name
                 )
             )
     return execution_context

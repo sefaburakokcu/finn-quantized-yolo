@@ -30,24 +30,24 @@
 import argparse
 import numpy as np
 import os
-from finn.core.datatype import DataType
-from driver_base import FINNExampleOverlay
+from driver.finn.core.datatype import DataType
+from driver.driver_base import FINNExampleOverlay
 
 # dictionary describing the I/O of the FINN-generated accelerator
 io_shape_dict = {
     # FINN DataType for input and output tensors
     "idt" : [DataType['UINT8']],
-    "odt" : [DataType['INT24']],
+    "odt" : [DataType['INT8']],
     # shapes for input and output tensors (NHWC layout)
     "ishape_normal" : [(1, 416, 416, 3)],
     "oshape_normal" : [(1, 13, 13, 18)],
     # folded / packed shapes below depend on idt/odt and input/output
     # PE/SIMD parallelization settings -- these are calculated by the
     # FINN compiler.
-    "ishape_folded" : [(1, 416, 416, 3, 1)],
-    "oshape_folded" : [(1, 13, 13, 1, 18)],
-    "ishape_packed" : [(1, 416, 416, 3, 1)],
-    "oshape_packed" : [(1, 13, 13, 1, 54)],
+    "ishape_folded" : [(1, 416, 416, 1, 3)],
+    "oshape_folded" : [(1, 13, 13, 18, 1)],
+    "ishape_packed" : [(1, 416, 416, 1, 3)],
+    "oshape_packed" : [(1, 13, 13, 18, 1)],
     "input_dma_name" : ['idma0'],
     "output_dma_name" : ['odma0'],
     "number_of_external_weights": 0,

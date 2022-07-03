@@ -49,28 +49,19 @@ def infer_and_save_results(driver, test_img_paths, img_size, conf_thres,
         img, ratio, (dw, dh) = letterbox(img, img_size, auto=False)
 
         img = img[:, :, ::-1]
-        img = np.ascontiguousarray(img)
         img = img.astype(np.uint8)
 
         driver_in = np.expand_dims(img, 0)
 
-        #t1 = time.time()
         output = driver.execute(driver_in)
-        #t2 = time.time()
-        output = scale.transpose(1,2,3,0)*output
+        output = scale*output
         output = output.transpose(0,3,1,2)
-        #print(f"Time passed for driver execution: {t2-t1} sec")
-        #t3 = time.time()
+        
         output = torch.from_numpy(output)
         pred = detect_head([output])[0]
-        #t4 = time.time()
-        #print(f"Time passed for sigmoid execution: {t4-t3} sec")
 
         # Get detected boxes_detected, labels, confidences, class-scores.
-        #t5 = time.time()
         pred = non_max_suppression(pred, conf_thres=conf_thres, iou_thres=0.10, classes=None, max_det=1000)
-        #t6 = time.time()
-        #print(f"Time passed for decode execution: {t6-t5} sec")
 
         boxes_detected, class_names_detected, probs_detected = [], [], []
         

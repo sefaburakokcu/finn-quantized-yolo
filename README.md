@@ -1,23 +1,40 @@
-# Low-Precision YOLO on PYNQ with FINN
+# LPYOLO: Low Precision YOLO for Face Detection on FPGA
 
 ## Contents
 - [Introduction](#introduction)
 - [Requirements](#requirements)
+- [Installation](#installation)
 - [Usage](#usage)
 - [Evaluation](#evaluation)
 
 
 ## Introduction
 
-This repo contains evaluation, export and deploy scripts of yolo models.
+This repo contains evaluation and deploy scripts of LPYOLO models.
 Models are trained by [Brevitas](https://github.com/Xilinx/brevitas) which is a PyTorch research library for quantization-aware training (QAT) and exported to [ONNX]([https://onnx.ai). [FINN](https://github.com/Xilinx/finn) which is an experimental framework from Xilinx Research Labs to explore deep neural network inference on FPGAs is used for deploying models on a [PYNQ-Z2](http://www.pynq.io/board.html) board.
 
 
 ## Requirements
 
 * Finn == 0.7
-* Onnx
-* Pytorch
+* Pytorch >= 1.8.1
+
+## Installation
+
+First, download [Pytorch armv7](https://github.com/KumaTea/pytorch-arm/releases/download/v1.8.1/torch-1.8.1-cp38-cp38-linux_armv7l.whl) and
+[Torchvision armv7](https://github.com/KumaTea/pytorch-arm/releases/download/v1.8.1/torchvision-0.9.1-cp38-cp38-linux_armv7l.whl).
+
+Then, run
+```bash
+pip install torch-1.8.1-cp38-cp38-linux_armv7l.whl
+pip install torchvision-0.9.1-cp38-cp38-linux_armv7l.whl
+```
+on PYNQ-Z2 board.
+
+Also, install bitstream
+```bash
+pip install bitstream
+```
 
 ## Usage
 
@@ -26,9 +43,15 @@ First, connect a PYNQ-Z2 board and open a terminal.Then, clone the project:
 ```bash
 git clone git@github.com:sefaburakokcu/finn-quantized-yolo.git
 ```
-Then, download one of the deploy.zip file from the table below and extract. Copy _driver.py_ into _src/deploy/driver/_, _finn-accel.bit_, _finn-accel.hwh_ and _scale.npy_ into _src/deploy/bitfile/_.
+Then, download one of the deploy.zip file from the table below and extract. Copy _finn-accel.bit_, _finn-accel.hwh_ and _scale.npy_ into _src/deploy/bitfile/_.
 
-**Models**
+**Model Definition**
+
+Definition of LPYOLO architecture is given below.
+
+![Model Definition](inputs/docs/lp_yolo_architecture.png)
+
+**Pretrained Models**
 
 | Models  | ONNX | Deploy |
 | ------------- | ------------- | ------------- |
@@ -40,6 +63,10 @@ Then, download one of the deploy.zip file from the table below and extract. Copy
 | 8W3A | [8w3a.onnx](https://1drv.ms/u/s!AoEINH-7w38TkmZ25kggUNiveWzM?e=hcUMeh) | [8w3a_deploy.zip](https://1drv.ms/u/s!AoEINH-7w38TkmeyAMLvKjqTolG0?e=fhuJ6Q) |
 
 Note: All models have 8 bits input and 8 bits output precisions. xWyA indicates x bits for weights and y bits precision for activations.
+
+**Export**
+
+Please follow steps given in [Medium Blog Post](unavailable) for exporting bitfiles from .onnx models.
 
 **Inference**
 

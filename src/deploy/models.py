@@ -36,7 +36,7 @@ class Detect(nn.Module):
                     self.grid[i], self.anchor_grid[i] = self._make_grid(nx, ny, i)
 
                 y = x[i]
-                y[..., 0:2] = (y[..., 0:2] + 1.0 - 0.5 + self.grid[i]) * self.stride[i]  # xy
+                y[..., 0:2] = (y[..., 0:2] + 0.5 + self.grid[i]) * self.stride[i]  # xy
                 y[..., 2:4] = (y[..., 2:4] + 1.0) ** 2 * self.anchor_grid[i]  # wh
                 y[..., 4:] = y[..., 4:] / 2 + 0.5
                 z.append(y.view(bs, -1, self.no))

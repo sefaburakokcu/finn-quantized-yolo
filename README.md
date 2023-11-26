@@ -5,6 +5,7 @@
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Citation](#citation)
 
 
 ## Introduction
@@ -67,7 +68,26 @@ Note: All models have 8 bits input and 8 bits output precisions. xWyA indicates 
 
 Please use the following [quantized-yolov5](https://github.com/sefaburakokcu/quantized-yolov5) repository for training quantized models.
 
+**Deployment**
+
+Please follow the steps in [End-to-End Deployment of LPYOLO: Low Precision YOLO for Face Detection on FPGA](https://medium.com/@bestamigunay1/end-to-end-deployment-of-lpyolo-low-precision-yolo-for-face-detection-on-fpga-13c3284ed14b).
+
 **Inference**
 
 Open _inference.ipynb_ for inference on images, _video_demo.ipynb_ for inference on a video under finn-quantized-yolo/src/deploy/ in jupyter-notebook.
+
+## Citation
+
+```
+@inproceedings{Gunay_2022, series={EECSS’22},
+   title={LPYOLO: Low Precision YOLO for Face Detection on FPGA},
+   ISSN={2369-811X},
+   url={http://dx.doi.org/10.11159/mvml22.108},
+   DOI={10.11159/mvml22.108},
+   booktitle={Proceedings of the 8th World Congress on Electrical Engineering and Computer Systems and Science},
+   publisher={Avestia Publishing},
+   author={Gunay, Bestami and Okcu, Sefa Burak and Bilge, Hasan Sakir},
+   year={2022},
+   month=jul, collection={EECSS’22} }
+```
 
